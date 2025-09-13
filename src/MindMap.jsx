@@ -21,6 +21,8 @@ export default function MindMap() {
   const dragging = useRef(false);
   const lastPos = useRef({ x: 0, y: 0 });
 
+  const pinchData = useRef({ initialDistance: 0, initialScale: 1 });
+
   // --- Load JSON dynamically from URL
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -46,7 +48,7 @@ export default function MindMap() {
     gRef.current.setAttribute("transform", `translate(${x}, ${y}) scale(${scale})`);
   };
 
-  // --- Mouse drag for panning
+  // --- Mouse events
   const handleMouseDown = (e) => {
     dragging.current = true;
     lastPos.current = { x: e.clientX, y: e.clientY };
@@ -78,7 +80,6 @@ export default function MindMap() {
       const cursor = pt.matrixTransform(ctm.inverse());
 
       if (e.ctrlKey) {
-        // Zoom at cursor
         const factor = e.deltaY < 0 ? 1.05 : 0.95;
         const prev = transform.current.scale;
         const next = Math.max(0.2, Math.min(5, prev * factor));
@@ -86,7 +87,6 @@ export default function MindMap() {
         transform.current.y = cursor.y - ((cursor.y - transform.current.y) * next) / prev;
         transform.current.scale = next;
       } else {
-        // Trackpad pan
         transform.current.x -= e.deltaX;
         transform.current.y -= e.deltaY;
       }
@@ -102,6 +102,42 @@ export default function MindMap() {
     applyTransform();
     return () => svg.removeEventListener("wheel", handleWheel);
   }, [mindMapData, handleWheel]);
+
+  // --- Touch events
+  const handleTouchStart = (e) => {
+    if (e.touches.length === 1) {
+      dragging.current = true;
+      lastPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    } else if (e.touches.length === 2) {
+      dragging.current = false;
+      const dx = e.touches[1].clientX - e.touches[0].clientX;
+      const dy = e.touches[1].clientY - e.touches[0].clientY;
+      pinchData.current.initialDistance = Math.hypot(dx, dy);
+      pinchData.current.initialScale = transform.current.scale;
+    }
+  };
+
+  const handleTouchMove = (e) => {
+    if (e.touches.length === 1 && dragging.current) {
+      const dx = e.touches[0].clientX - lastPos.current.x;
+      const dy = e.touches[0].clientY - lastPos.current.y;
+      transform.current.x += dx;
+      transform.current.y += dy;
+      lastPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      applyTransform();
+    } else if (e.touches.length === 2) {
+      const dx = e.touches[1].clientX - e.touches[0].clientX;
+      const dy = e.touches[1].clientY - e.touches[0].clientY;
+      const distance = Math.hypot(dx, dy);
+      const factor = distance / pinchData.current.initialDistance;
+      transform.current.scale = Math.max(0.2, Math.min(5, pinchData.current.initialScale * factor));
+      applyTransform();
+    }
+  };
+
+  const handleTouchEnd = (e) => {
+    if (e.touches.length === 0) dragging.current = false;
+  };
 
   // --- Node utilities
   const findNodeById = (node, id) => {
@@ -170,15 +206,11 @@ export default function MindMap() {
     let childrenElements = [];
     let childPositions = [];
 
-    // Measure node width based on text
     const textWidth = measureTextWidth(node.label);
     const rectWidth = Math.max(120, textWidth + 20);
     const rectHeight = 50;
-
-    // Horizontal spacing: minimal gap + slight padding
     const gapX = Math.max(180, rectWidth + 250);
 
-    // Render children if expanded
     if (isExpanded && node.children && node.children.length > 0) {
       let offsetY = y - ((getSubtreeHeight(node) - 1) * gapY) / 2;
 
@@ -199,12 +231,10 @@ export default function MindMap() {
       }
     }
 
-    // Draw connectors
     const connectorLines = childPositions.map((pos, idx) => (
       <path
         key={`line-${node.children[idx].id}`}
-        d={`M${pos.parentX},${pos.parentY} C${pos.parentX + 40},${pos.parentY} ${pos.childX - 40
-          },${pos.childY} ${pos.childX},${pos.childY}`}
+        d={`M${pos.parentX},${pos.parentY} C${pos.parentX + 40},${pos.parentY} ${pos.childX - 40},${pos.childY} ${pos.childX},${pos.childY}`}
         stroke="#90caf9"
         strokeWidth="2"
         fill="transparent"
@@ -212,13 +242,9 @@ export default function MindMap() {
       />
     ));
 
-    // Expand button (+) for collapsed nodes with children
     const expandButton =
       node.children && node.children.length > 0 && !isExpanded ? (
-        <g
-          style={{ cursor: "pointer" }}
-          onClick={(e) => toggleNode(node.id, e.ctrlKey)}
-        >
+        <g style={{ cursor: "pointer" }} onClick={(e) => toggleNode(node.id, e.ctrlKey)}>
           <circle cx={x + rectWidth + 20} cy={y + rectHeight / 2} r={8} fill="#1976d2" />
           <foreignObject x={x + rectWidth + 14} y={y + rectHeight / 2 - 6} width={12} height={12}>
             <AiOutlinePlus style={{ width: "12px", height: "12px", color: "white" }} />
@@ -263,7 +289,6 @@ export default function MindMap() {
     );
   };
 
-
   if (!mindMapData)
     return <p style={{ color: "#fff", textAlign: "center", marginTop: "2rem" }}>Loading mind map...</p>;
 
@@ -282,6 +307,10 @@ export default function MindMap() {
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
     >
       <button
         onClick={toggleAllNodes}
