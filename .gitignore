@@ -1,0 +1,14 @@
+node_modules/
+npm-debug.log*
+
+
+dist/
+build/
+tmp/
+temp/
+
+# IDE files
+.vscode/
+
+logs/
+*.log
