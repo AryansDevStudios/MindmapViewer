@@ -209,7 +209,7 @@ export default function MindMap() {
     const textWidth = measureTextWidth(node.label);
     const rectWidth = Math.max(120, textWidth + 20);
     const rectHeight = 50;
-    const gapX = Math.max(180, rectWidth + 250);
+    const gapX = Math.max(180, rectWidth + 200);
 
     if (isExpanded && node.children && node.children.length > 0) {
       let offsetY = y - ((getSubtreeHeight(node) - 1) * gapY) / 2;
@@ -231,16 +231,29 @@ export default function MindMap() {
       }
     }
 
-    const connectorLines = childPositions.map((pos, idx) => (
-      <path
-        key={`line-${node.children[idx].id}`}
-        d={`M${pos.parentX},${pos.parentY} C${pos.parentX + 40},${pos.parentY} ${pos.childX - 40},${pos.childY} ${pos.childX},${pos.childY}`}
-        stroke="#90caf9"
-        strokeWidth="2"
-        fill="transparent"
-        style={{ transition: "all 0.3s ease" }}
-      />
-    ));
+    const connectorLines = childPositions.map((pos, idx) => {
+        // --- CHANGE START ---
+        // 1. Calculate a dynamic control offset based on the distance between nodes.
+        // This makes the curve's shape proportional to its length.
+        const controlOffset = (pos.childX - pos.parentX) * 0.5;
+
+        // 2. Create the new path string using the dynamic offset.
+        // This defines a smooth, flowing S-shaped curve from parent to child.
+        const pathData = `M${pos.parentX},${pos.parentY} C${pos.parentX + controlOffset},${pos.parentY} ${pos.childX - controlOffset},${pos.childY} ${pos.childX},${pos.childY}`;
+
+        return (
+            <path
+                key={`line-${node.children[idx].id}`}
+                d={pathData}
+                // 3. Update stroke color and width to better match the example image.
+                stroke="rgb(100, 100, 100)" // A neutral gray for the line
+                strokeWidth="1"              // A thinner line
+                fill="transparent"
+                style={{ transition: "all 0.3s ease" }}
+            />
+        );
+        // --- CHANGE END ---
+    });
 
     const expandButton =
       node.children && node.children.length > 0 && !isExpanded ? (
@@ -300,7 +313,7 @@ export default function MindMap() {
         overflow: "hidden",
         cursor: dragging.current ? "grabbing" : "grab",
         position: "relative",
-        background: "#111",
+        background: "#212121", // Darker background to match the style
         touchAction: "none",
       }}
       onMouseDown={handleMouseDown}
